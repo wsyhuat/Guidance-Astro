@@ -60,7 +60,7 @@ const groups = [
 <section class="groups-section" aria-label="团队分组">
     <div class="groups-grid">
         {groups.map((group, i) => (
-            <a href={group.link} class="group-card reveal-upon-scroll" style={`transition-delay: ${i * 0.08}s;`}>
+            <a href={group.link} class="group-card reveal-upon-scroll stagger-item" style={`transition-delay: ${i * 0.08}s;`}>
                 <div class="group-icon">
                     {group.icon === 'eye' && (
                         <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
@@ -118,13 +118,21 @@ const groups = [
         border-radius: 12px;
         padding: 2.5rem 1.5rem 2rem;
         text-align: center;
-        transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+        transition: transform var(--transition-fast), box-shadow var(--transition-fast), border-color var(--transition-fast);
+    }
+
+    .group-card::before {
+        display: none;
     }
 
     .group-card:hover {
         transform: translateY(-4px);
         box-shadow: 0 8px 30px rgba(59,130,246,0.12);
         border-color: var(--sl-color-accent);
+    }
+
+    .group-card:active {
+        transform: scale(0.98);
     }
 
     .group-icon {
@@ -145,14 +153,17 @@ const groups = [
         font-weight: 700;
         margin: 0 0 0.75rem;
         color: var(--fs-color-heading);
+        border-left: none;
+        padding-left: 0;
     }
 
     .group-desc {
         font-size: 0.9rem;
+        font-weight: 500;
         line-height: 1.7;
-        color: var(--fs-color-text-dimmed);
+        color: var(--fs-color-text);
         margin: 0;
-        opacity: 0.7;
+        opacity: 0.85;
     }
 
     :global([data-theme='light']) .group-card {
