@@ -13,7 +13,6 @@ import NewsSection from '../../../components/home/sections/NewsSection.astro'
 import FormulaStudentInfo from '../../../components/home/sections/FormulaStudentInfo.astro'
 import Stats from '../../../components/home/sections/Stats.astro'
 import Countdown from '../../../components/home/sections/Countdown.astro'
-import ShowcaseLab from '../../../components/home/sections/ShowcaseLab.astro'
 import Features from '../../../components/home/sections/Features.astro'
 import Seasons from '../../../components/home/sections/Seasons.astro'
 import Sponsors from '../../../components/home/sections/Sponsors.astro'
@@ -122,7 +121,6 @@ import { enHomeContent as home, seasons, sponsorGroups } from '../../../data/hom
 />
 <Stats stats={home.stats} />
 <Countdown locale="en" />
-<ShowcaseLab content={home.showcase} />
 
 {home.achievements.map((achievement, index) => (
 
