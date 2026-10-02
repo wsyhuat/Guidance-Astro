@@ -34,9 +34,9 @@
 
 ### 贡献流程
 
-1. Fork 本仓库（单人项目可直接在 `main` 开发，经 `docs/WORKFLOW.md:5` 确认偏离分支规范）
+1. Fork 本仓库（单人项目可直接在 `main` 开发；分支规范见 `docs/WORKFLOW.md` §5 分支与提交规范）
 2. 创建功能分支（团队协作时 `type/area/desc`，如 `feat/worker/auto-deploy`；单人可跳过）
-3. 进行更改（遵循 `docs/WORKFLOW.md:6` 质量门禁：`pnpm lint` / `format:check` / `test:run` / `build` / `quality:bundle` / `quality:theme`）
+3. 进行更改（遵循 `docs/WORKFLOW.md` §6 质量门禁：`pnpm lint` / `format:check` / `test:run` / `build` / `quality:bundle` / `quality:theme`）
 4. 提交 Pull Request（团队协作）或直接 `git push origin main` 后由 `CI/CD` 验证（单人，见 `docs/PROJECT_MANAGEMENT_MODEL.md:189`）
 5. 等待审核（单人可自审，`curl -sI https://huat-fsac.eu.org/` 验 `content-security-policy: nonce-`）
 
@@ -78,6 +78,15 @@ pnpm dev
 | `pnpm test:coverage`  | 生成测试覆盖率报告   |
 | `pnpm test:e2e`       | 执行关键路径烟雾测试 |
 | `pnpm quality:bundle` | 执行构建体积预算检查 |
+
+### 单测约定：行为优先于覆盖率（见 #105）
+
+新增或修改单测时，优先从用户/调用方可观察的效果写断言：
+
+- 断言渲染文本、DOM 变化、触发的副作用（网络/存储/事件），而非仅“函数不抛错”。
+- 反例：`expect(() => preloadImages(['/a.jpg'])).not.toThrow()` —— 它只证明没崩，改坏逻辑也照样绿。
+- 正例：`tests/unit/stats-counter.test.ts`（SSR 真值 → 初始化重置为 0 → 交集后动画到目标值）、改写后的 `preloadImages` 行为用例（Image 构造次数/入参/异常吞掉）。
+- 存量 `*-boost` 用例不必一次性重写：触及对应模块时顺手改写为行为用例即可。
 
 ---
 

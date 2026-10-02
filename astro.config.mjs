@@ -1,17 +1,83 @@
+import { fileURLToPath } from 'node:url'
+
 import { defineConfig } from 'astro/config'
 import cloudflare from '@astrojs/cloudflare'
+import sitemap from '@astrojs/sitemap'
 import starlight from '@astrojs/starlight'
 import sidebar from './.config/sidebar.mjs'
 import filterKnownBuildWarnings from './src/integrations/filter-known-build-warnings'
 import dedupeCss from './src/integrations/dedupe-css'
+import {
+    collectContentPagePaths,
+    collectNonIndexablePagePaths,
+} from './src/integrations/sitemap-paths'
+import { siteRedirects } from './src/config/redirects'
 import purgecss from 'vite-plugin-purgecss'
+
+/** 站点正式域名（`site` 与 sitemap 的 `customPages` 共用同一来源） */
+const SITE_URL = 'https://huat-fsac.eu.org'
+
+/**
+ * issue #116：本站是全 SSR（`output: 'server'`），Starlight 内容页走动态 `[...slug]` 路由。
+ * `@astrojs/sitemap` 构建期只能枚举「有静态 pathname 的路由」，因此线上 sitemap 曾只剩
+ * 8 条 URL（6 个跳转桩 + 2 个静态页），166 个内容页全部缺席。
+ *
+ * 这里在构建期扫描文件系统，把内容页路径补进 `customPages`，并用 `filter` 剔除跳转桩 /
+ * noindex 页（推导规则见 `src/integrations/sitemap-paths.ts`）。
+ */
+const contentPagePaths = collectContentPagePaths(
+    fileURLToPath(new URL('./src/content/docs/', import.meta.url))
+)
+const nonIndexablePagePaths = new Set(
+    collectNonIndexablePagePaths(fileURLToPath(new URL('./src/pages/', import.meta.url)))
+)
+
+/**
+ * 给 Markdown 渲染出的 <img> 补齐 loading="lazy" / decoding="async"。
+ *
+ * 背景：Starlight/Astro 默认不会为 markdown 里的图片添加这两个属性。本站文档单篇常含几十张
+ * 截图，全部以同步方式发出会与首屏 LCP 争抢带宽；缺少 decoding="async" 时，大图解码也会
+ * 占用主线程造成滚动掉帧。
+ *
+ * 采用手写的递归遍历而非 unist-util-visit，避免为了一个 8 行规则引入新依赖。
+ * 只对「未显式声明」的属性兜底：作者手写的 loading="eager" / decoding="sync" 一律保留。
+ */
+function rehypeImageDefaults() {
+    return (tree) => {
+        const visit = (node) => {
+            if (node && node.type === 'element' && node.tagName === 'img') {
+                node.properties ??= {}
+                if (node.properties.loading == null) {
+                    node.properties.loading = 'lazy'
+                }
+                if (node.properties.decoding == null) {
+                    node.properties.decoding = 'async'
+                }
+            }
+            if (Array.isArray(node?.children)) {
+                node.children.forEach(visit)
+            }
+        }
+        visit(tree)
+    }
+}
 
 // https://astro.build/config
 export default defineConfig({
     output: 'server',
     adapter: cloudflare({ imageService: 'compile' }),
-    site: 'https://huat-fsac.eu.org',
+    site: SITE_URL,
     trailingSlash: 'always',
+    markdown: {
+        // ⚠️ 已知弃用：Astro 7 提示 `markdown.rehypePlugins` 已废弃，应改用
+        //   `markdown.processor = unified({ rehypePlugins: [...] })`（来自 @astrojs/markdown-remark）。
+        // 暂不迁移的两个原因：
+        //   1. @astrojs/markdown-remark 尚未安装，为一个 8 行规则新增依赖不划算；
+        //   2. Starlight 0.41 仍走旧 remark/rehype 管线，替换 processor 存在与其冲突的风险。
+        // 迁移时机：Starlight 跟进 Astro 7 的 unified() 方案后，随大版本升级一起切。
+        // 当前表现为构建期一条 deprecation warning，功能不受影响。
+        rehypePlugins: [rehypeImageDefaults],
+    },
     vite: {
         build: {
             cssCodeSplit: true,
@@ -63,14 +129,10 @@ export default defineConfig({
                         /^fab-/,
                         /^error-/,
                         /^astro-/,
-                        // Starlight Search
+                        // Starlight Search（pagefind-ui 被 /^pagefind/ 覆盖，不重复列）
                         'site-search',
                         /^pagefind/,
-                        'pagefind-ui',
                         /^dialog/,
-                        'dialog',
-                        'data-open-modal',
-                        'data-close-modal',
                         'data-search-modal-open',
                     ],
                     deep: [
@@ -78,9 +140,9 @@ export default defineConfig({
                         /main-pane/,
                         /page/,
                         /header/,
+                        // /search/ 已覆盖 site-search，不重复列
                         /search/,
                         /sl-/,
-                        /site-search/,
                         /pagefind/,
                         /dialog/,
                         // 全局美化层：伪类/通用选择器无 class 锚点，会被 purgecss 误删
@@ -93,43 +155,7 @@ export default defineConfig({
             }),
         ],
     },
-    redirects: {
-        '/docs/': '/',
-        '/2024-learning-roadmap/': '/archive/2024/2024-learning-roadmap/',
-        '/2025/感知/': '/archive/2025/sensing/',
-        '/2025/感知/激光雷达/': '/archive/2025/sensing/激光雷达/',
-        '/2025/感知/摄像头/': '/archive/2025/sensing/摄像头/',
-        '/2025/定位建图/': '/archive/2025/localization-mapping/',
-        '/2025/定位建图/ins5711daa/': '/archive/2025/localization-mapping/ins5711daa/',
-        '/2025/定位建图/学习路线/': '/archive/2025/localization-mapping/学习路线/',
-        '/2025/定位建图/记录/': '/archive/2025/localization-mapping/记录/',
-        '/2025/规控/': '/archive/2025/planning-control/',
-        '/2025/规控/控制/': '/archive/2025/planning-control/控制/',
-        '/2025/规控/直线/': '/archive/2025/planning-control/直线/',
-        '/2025/规控/高速循迹/': '/archive/2025/planning-control/高速循迹/',
-        '/2025/仿真测试/': '/archive/2025/simulation/',
-        '/2025/仿真测试/仿真/': '/archive/2025/simulation/仿真/',
-        '/2025/电气/': '/archive/2025/electrical/',
-        '/2025/电气/电池箱/': '/archive/2025/electrical/电池箱/',
-        '/2025/电气/硬件/': '/archive/2025/electrical/硬件/',
-        '/2025/电气/线束/': '/archive/2025/electrical/线束/',
-        '/2025/电气/软件/': '/archive/2025/electrical/软件/',
-        '/2025/机械/': '/archive/2025/mechanical/',
-        '/2025/机械/传动/': '/archive/2025/mechanical/传动/',
-        '/2025/机械/制动/': '/archive/2025/mechanical/制动/',
-        '/2025/机械/车架车身/': '/archive/2025/mechanical/车架车身/',
-        '/2025/机械/转向悬架/': '/archive/2025/mechanical/转向悬架/',
-        '/2025/项管/': '/archive/2025/management/',
-        '/2025/项管/新媒体/': '/archive/2025/management/新媒体/',
-        '/2025/项管/营销/': '/archive/2025/management/营销/',
-        '/2025/项管/运营/': '/archive/2025/management/运营/',
-        '/感知/': '/archive/sensing/',
-        '/定位建图/': '/archive/localization-mapping/',
-        '/规控/': '/archive/planning-control/',
-        '/仿真测试/': '/archive/simulation/',
-        '/综合/': '/archive/general/',
-        '/文档中心/': '/docs-center/',
-    },
+    redirects: siteRedirects,
     integrations: [
         filterKnownBuildWarnings(),
         dedupeCss(),
@@ -176,6 +202,37 @@ export default defineConfig({
                     attrs: {
                         property: 'og:image',
                         content: 'https://huat-fsac.eu.org/og-image.jpg',
+                    },
+                },
+                /* 补齐 og:image 的尺寸与替代文本：
+                   缺 width/height 时 Facebook/LinkedIn 首帧无法预留版位，抓取后要二次布局；
+                   缺 alt 时分享卡片对读屏用户没有任何可读描述。实际文件为 1200x630 JPEG。 */
+                {
+                    tag: 'meta',
+                    attrs: {
+                        property: 'og:image:width',
+                        content: '1200',
+                    },
+                },
+                {
+                    tag: 'meta',
+                    attrs: {
+                        property: 'og:image:height',
+                        content: '630',
+                    },
+                },
+                {
+                    tag: 'meta',
+                    attrs: {
+                        property: 'og:image:alt',
+                        content: 'HUAT FSAC 东风 HUAT 无人驾驶车队',
+                    },
+                },
+                {
+                    tag: 'meta',
+                    attrs: {
+                        property: 'og:site_name',
+                        content: 'HUAT FSAC',
                     },
                 },
                 {
@@ -324,6 +381,19 @@ export default defineConfig({
                 root: { label: '简体中文', lang: 'zh-CN' },
                 en: { label: 'English', lang: 'en', dir: 'ltr' },
             },
+        }),
+        // ⚠️ Starlight 检测到用户已注册 `@astrojs/sitemap` 时不会再注册自己的那份
+        //    （见 @astrojs/starlight/index.ts 对 integrations 名称的判断），因此下面的
+        //    `i18n` 必须与 Starlight 的 getSitemapConfig() 保持等价，否则双语 hreflang
+        //    互链会失效。
+        sitemap({
+            i18n: {
+                defaultLocale: 'root',
+                locales: { root: 'zh-CN', en: 'en' },
+            },
+            customPages: contentPagePaths.map((path) => new URL(path, SITE_URL).href),
+            filter: (page) =>
+                !nonIndexablePagePaths.has(decodeURI(new URL(page, SITE_URL).pathname)),
         }),
     ],
 })

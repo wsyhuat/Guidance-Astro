@@ -40,8 +40,10 @@ function getHeroVariants(src: string) {
     const ext = src.slice(dot)
     // 本地图片已为 hero 三图生成 768/1440 的 JPEG/WebP/AVIF 变体，其余单图也已生成 WebP/AVIF
     // 统一返回 768/1440 srcset，浏览器自动选择；若某尺寸缺失则 404 回退到 fallback，不影响首屏
+    // fallback 取 -1440 变体而非全尺寸原图：原图（photo-together.jpg 288KB 等）不再被请求，
+    // 已从 public/assets 删除，首屏 preload 也不再拉全量原图（见 #103）
     return {
-        fallback: `${base}${ext}`,
+        fallback: `${base}-1440${ext}`,
         jpgSrcSet: `${base}-768.jpg 768w, ${base}-1440.jpg 1440w`,
         webpSrcSet: `${base}-768.webp 768w, ${base}-1440.webp 1440w`,
         avifSrcSet: `${base}-768.avif 768w, ${base}-1440.avif 1440w`,
@@ -52,15 +54,15 @@ function getHeroVariants(src: string) {
 const images = (backgroundImages ?? []).map((src) => getHeroVariants(src)).filter(Boolean) as NonNullable<ReturnType<typeof getHeroVariants>>[]
 ---
 
-{/* preload LCP: 优先 AVIF → WebP → JPEG，使用响应式 imagesrcset 命中 768/1440 */}
+{/*
+  preload LCP 图：只预载 AVIF 这一条，且带 type="image/avif"。
+  原先并列了 avif / webp / jpeg 三条 preload —— 支持 avif 的浏览器同时也支持 webp 与 jpeg，
+  三条 type 全部匹配 ⇒ 三份文件被同时下载（同一张图 3 倍流量），
+  其中未被 <picture> 选中的两条还会触发 Chrome 的 "resource was preloaded but not used" 告警。
+  不支持 avif 的浏览器会因 type 不匹配跳过本条，由下方 <picture> 自行回退到 webp/jpeg。
+*/}
 {images.length > 0 && images[0].avifSrcSet && (
     <link rel="preload" as="image" type="image/avif" imagesrcset={images[0].avifSrcSet} imagesizes="100vw" fetchpriority="high" />
-)}
-{images.length > 0 && images[0].webpSrcSet && (
-    <link rel="preload" as="image" type="image/webp" imagesrcset={images[0].webpSrcSet} imagesizes="100vw" fetchpriority="high" />
-)}
-{images.length > 0 && (
-    <link rel="preload" as="image" href={images[0].fallback} imagesrcset={images[0].jpgSrcSet || undefined} imagesizes="100vw" fetchpriority="high" />
 )}
 
 <section class="hero-v2 fs-full-bleed" role="region" aria-label="Hero">
@@ -106,7 +108,6 @@ const images = (backgroundImages ?? []).map((src) => getHeroVariants(src)).filte
         <a
             class="hero-cta fs-cta-clip stagger-item"
             href={ctaLink}
-            role="button"
             data-astro-prefetch="hover"
             aria-label={`${ctaText} - ${t.accessibility.exploreTeamContent}`}
         >
